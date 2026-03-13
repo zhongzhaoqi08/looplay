@@ -1,0 +1,151 @@
+{
+  "identity": {
+    "app_name": "Loop Studio",
+    "tone": "Precision, Dark, tactile, Professional Audio Gear",
+    "archetype": "The Performance Pro (Dark Mode Variant)",
+    "description": "A focused, distraction-free environment for musicians and learners. The interface mimics high-end audio equipment—dark, matte, with precise lighting for active states."
+  },
+  "typography": {
+    "google_fonts_url": "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap",
+    "primary_font": "DM Sans, sans-serif",
+    "heading_font": "Barlow Condensed, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "rules": {
+      "headings": "font-heading font-bold uppercase tracking-tight text-white",
+      "body": "font-primary text-zinc-400 leading-relaxed",
+      "data": "font-mono text-xs tracking-wide text-zinc-500",
+      "timestamps": "font-mono text-blue-400 font-medium"
+    }
+  },
+  "colors": {
+    "palette": {
+      "background": "#09090b",
+      "surface": "#18181b",
+      "surface_highlight": "#27272a",
+      "primary": "#3b82f6",
+      "primary_glow": "rgba(59, 130, 246, 0.5)",
+      "accent": "#ef4444",
+      "text_main": "#fafafa",
+      "text_muted": "#a1a1aa",
+      "border": "#27272a"
+    },
+    "tailwind_config_extension": {
+      "colors": {
+        "studio": {
+          "bg": "#09090b",
+          "panel": "#121214",
+          "border": "#27272a",
+          "blue": "#3b82f6",
+          "red": "#ef4444"
+        }
+      }
+    }
+  },
+  "layout_strategy": {
+    "type": "Single Page Vertical Flow",
+    "container": "max-w-4xl mx-auto px-6 py-12 min-h-screen flex flex-col gap-12",
+    "grid_system": "flex flex-col gap-8",
+    "z_index_layers": {
+      "background_texture": -1,
+      "base": 1,
+      "overlay": 50,
+      "toast": 100
+    }
+  },
+  "components": {
+    "Global": {
+      "Background": "bg-studio-bg relative overflow-hidden",
+      "Texture": "Fixed 'noise' overlay with 3% opacity to mimic film grain or matte plastic.",
+      "Border_Radius": "rounded-2xl for containers, rounded-full for buttons"
+    },
+    "Hero_Input": {
+      "Container": "relative w-full mb-8",
+      "Input": "w-full bg-studio-panel border-studio-border text-lg p-6 rounded-2xl focus:ring-2 focus:ring-studio-blue focus:border-transparent transition-all shadow-inner font-primary placeholder:text-zinc-600",
+      "Icon": "absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500"
+    },
+    "Video_Player": {
+      "Container": "relative aspect-video w-full rounded-2xl overflow-hidden border border-studio-border shadow-2xl bg-black",
+      "Iframe": "w-full h-full object-cover",
+      "Empty_State": "flex flex-col items-center justify-center h-full text-zinc-600 font-heading tracking-widest uppercase"
+    },
+    "Control_Deck": {
+      "Container": "bg-studio-panel border border-studio-border rounded-3xl p-8 shadow-xl flex flex-col gap-6",
+      "Timeline": {
+        "Container": "flex items-center gap-4",
+        "Slider": "h-2 bg-zinc-800 rounded-full",
+        "Track": "bg-studio-blue",
+        "Thumb": "h-5 w-5 bg-white border-2 border-studio-blue rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)] focus:scale-110 transition-transform"
+      },
+      "Toolbar": "flex flex-wrap items-center justify-between gap-4",
+      "Loop_Controls": "flex items-center gap-2 bg-zinc-900/50 p-2 rounded-xl border border-white/5",
+      "Speed_Control": "min-w-[120px]"
+    },
+    "History_Drawer": {
+      "Container": "w-full",
+      "Title": "font-heading text-xl text-zinc-400 mb-4 uppercase tracking-widest",
+      "Grid": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4",
+      "Card": "group relative flex flex-col gap-2 bg-studio-panel/50 border border-white/5 hover:border-studio-blue/50 p-4 rounded-xl transition-all hover:bg-studio-panel cursor-pointer hover:shadow-lg hover:-translate-y-1",
+      "Card_Title": "font-primary font-medium text-zinc-300 group-hover:text-white truncate",
+      "Card_Meta": "text-xs font-mono text-zinc-600 group-hover:text-studio-blue"
+    }
+  },
+  "ui_elements": {
+    "buttons": {
+      "primary": "bg-studio-blue text-white hover:bg-blue-600 shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] transition-all active:scale-95 font-heading uppercase tracking-wide px-8 py-3 rounded-full text-sm",
+      "secondary": "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-white/5 transition-all active:scale-95 font-heading uppercase tracking-wide px-6 py-2 rounded-full text-xs",
+      "icon": "p-3 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition-colors",
+      "loop_active": "bg-studio-red/10 text-studio-red border-studio-red/50 animate-pulse"
+    },
+    "inputs": {
+      "time": "bg-transparent border-b border-zinc-700 text-center font-mono text-xl w-24 focus:border-studio-blue focus:outline-none text-white p-1"
+    }
+  },
+  "motion": {
+    "library": "framer-motion",
+    "animations": {
+      "fadeIn": {
+        "initial": { "opacity": 0, "y": 20 },
+        "animate": { "opacity": 1, "y": 0 },
+        "transition": { "duration": 0.4, "ease": "easeOut" }
+      },
+      "scaleIn": {
+        "initial": { "scale": 0.95, "opacity": 0 },
+        "animate": { "scale": 1, "opacity": 1 }
+      },
+      "list_stagger": {
+        "container": {
+          "hidden": { "opacity": 0 },
+          "show": {
+            "opacity": 1,
+            "transition": { "staggerChildren": 0.1 }
+          }
+        },
+        "item": {
+          "hidden": { "opacity": 0, "x": -20 },
+          "show": { "opacity": 1, "x": 0 }
+        }
+      }
+    }
+  },
+  "assets": {
+    "icons": "lucide-react",
+    "required_icons": ["Play", "Pause", "RotateCcw", "History", "Trash2", "Settings", "Zap", "Music", "Video"],
+    "images": []
+  },
+  "instructions_to_main_agent": [
+    "1. Setup: Install 'react-player' or use 'react-youtube' for the iframe integration. DO NOT use raw iframe tag if possible, wrappers are safer.",
+    "2. State Management: Use a simple 'useLocalStorage' hook for the history. No complex Redux needed.",
+    "3. Parsing: Build a robust YouTube URL parser (supports standard, short, and mobile urls).",
+    "4. Feedback: Use 'sonner' for toast notifications when a loop is set or video saved.",
+    "5. Precision: The 'Loop' functionality must be precise. React to 'onProgress' events carefully.",
+    "6. Theme: Force DARK MODE. Do not implement a light mode toggle. This is a studio tool.",
+    "7. Layout: Avoid centering everything. The Player is the hero, but the Controls should feel like a 'Dashboard' below it.",
+    "8. Testing: Add data-testid to the input, play button, and loop toggles."
+  ],
+  "universal_guidelines": [
+    "Avoid gradients on text.",
+    "Use 24px-32px padding inside cards.",
+    "Inputs should look 'heavy' and substantial, not like thin paper.",
+    "Always provide visual feedback on button press (scale down)."
+  ]
+}
