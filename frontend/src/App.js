@@ -5,13 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { 
-  Play, 
-  Pause, 
-  RotateCcw, 
   History, 
   Trash2, 
   Video,
-  Repeat,
   Sun,
   Moon
 } from "lucide-react";
@@ -63,7 +59,6 @@ function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [loopStart, setLoopStart] = useState(0);
   const [loopEnd, setLoopEnd] = useState(0);
-  const [loopEnabled, setLoopEnabled] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [startTimeInput, setStartTimeInput] = useState("0:00");
   const [endTimeInput, setEndTimeInput] = useState("0:00");
@@ -73,7 +68,6 @@ function App() {
   const [recentVideos, setRecentVideos] = useLocalStorage("loop-studio-history", []);
   
   const playerRef = useRef(null);
-  const containerRef = useRef(null);
   const progressIntervalRef = useRef(null);
 
   // Apply theme to document
@@ -99,7 +93,6 @@ function App() {
   useEffect(() => {
     if (!videoId) return;
     
-    // Clean up previous player
     if (playerRef.current) {
       playerRef.current.destroy();
       playerRef.current = null;
@@ -118,10 +111,7 @@ function App() {
           autoplay: 1,
           modestbranding: 1,
           rel: 0,
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
-          iv_load_policy: 3,
+          controls: 1, // Show YouTube controls
           playsinline: 1,
           enablejsapi: 1,
           origin: window.location.origin
@@ -138,7 +128,6 @@ function App() {
             setPlaying(true);
           },
           onStateChange: (event) => {
-            // 1 = playing, 2 = paused
             if (event.data === 1) {
               setPlaying(true);
             } else if (event.data === 2 || event.data === 0) {
@@ -159,7 +148,7 @@ function App() {
     };
   }, [videoId, playbackRate]);
 
-  // Progress tracking
+  // Auto-loop logic - always active when loopEnd > loopStart
   useEffect(() => {
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
@@ -171,11 +160,11 @@ function App() {
           const time = playerRef.current.getCurrentTime();
           setCurrentTime(time);
 
-          // Loop logic
-          if (loopEnabled && loopEnd > loopStart) {
-            if (time >= loopEnd) {
-              playerRef.current.seekTo(loopStart, true);
-            }
+          // Auto-loop when we have valid start/end times
+          const start = parseTime(startTimeInput);
+          const end = parseTime(endTimeInput);
+          if (end > start && time >= end) {
+            playerRef.current.seekTo(start, true);
           }
         }
       }, 200);
@@ -186,7 +175,7 @@ function App() {
         clearInterval(progressIntervalRef.current);
       }
     };
-  }, [playerReady, playing, loopEnabled, loopStart, loopEnd]);
+  }, [playerReady, playing, startTimeInput, endTimeInput]);
 
   // Handle URL submission
   const handleLoadVideo = useCallback(() => {
@@ -195,7 +184,6 @@ function App() {
       setVideoId(id);
       setLoopStart(0);
       setLoopEnd(0);
-      setLoopEnabled(false);
       setStartTimeInput("0:00");
       setEndTimeInput("0:00");
       toast.success("Video loaded!");
@@ -207,13 +195,15 @@ function App() {
   // Save to history when video plays
   useEffect(() => {
     if (videoId && duration > 0) {
+      const start = parseTime(startTimeInput);
+      const end = parseTime(endTimeInput);
       const newEntry = {
         id: videoId,
         url: `https://youtube.com/watch?v=${videoId}`,
         title: getVideoTitle(videoId),
         timestamp: Date.now(),
-        loopStart,
-        loopEnd,
+        loopStart: start,
+        loopEnd: end,
         playbackRate
       };
       
@@ -222,54 +212,16 @@ function App() {
         return [newEntry, ...filtered].slice(0, 5);
       });
     }
-  }, [videoId, duration, loopStart, loopEnd, playbackRate, setRecentVideos]);
-
-  // Toggle play/pause
-  const handlePlayPause = useCallback(() => {
-    if (!playerRef.current || !playerReady) return;
-    
-    if (playing) {
-      playerRef.current.pauseVideo();
-    } else {
-      playerRef.current.playVideo();
-    }
-  }, [playing, playerReady]);
-
-  // Toggle loop
-  const handleToggleLoop = useCallback(() => {
-    if (!loopEnabled) {
-      const start = parseTime(startTimeInput);
-      const end = parseTime(endTimeInput);
-      
-      if (end <= start) {
-        toast.error("End time must be after start time");
-        return;
-      }
-      
-      setLoopStart(start);
-      setLoopEnd(end);
-      setLoopEnabled(true);
-      
-      if (playerRef.current && playerReady) {
-        playerRef.current.seekTo(start, true);
-      }
-      toast.success(`Loop set: ${formatTime(start)} - ${formatTime(end)}`);
-    } else {
-      setLoopEnabled(false);
-      toast.info("Loop disabled");
-    }
-  }, [loopEnabled, startTimeInput, endTimeInput, playerReady]);
+  }, [videoId, duration, startTimeInput, endTimeInput, playbackRate, setRecentVideos]);
 
   // Load from history
   const handleLoadFromHistory = useCallback((video) => {
     setUrl(video.url);
     setVideoId(video.id);
     if (video.loopStart !== undefined) {
-      setLoopStart(video.loopStart);
       setStartTimeInput(formatTime(video.loopStart));
     }
     if (video.loopEnd !== undefined) {
-      setLoopEnd(video.loopEnd);
       setEndTimeInput(formatTime(video.loopEnd));
     }
     if (video.playbackRate) {
@@ -286,29 +238,18 @@ function App() {
 
   // Set current time as start/end
   const setCurrentAsStart = useCallback(() => {
-    setLoopStart(currentTime);
     setStartTimeInput(formatTime(currentTime));
+    toast.success(`Start: ${formatTime(currentTime)}`);
   }, [currentTime]);
 
   const setCurrentAsEnd = useCallback(() => {
-    setLoopEnd(currentTime);
     setEndTimeInput(formatTime(currentTime));
+    toast.success(`End: ${formatTime(currentTime)}`);
   }, [currentTime]);
-
-  // Handle slider change for seeking
-  const handleSeek = useCallback((value) => {
-    const time = value[0];
-    if (playerRef.current && playerReady) {
-      playerRef.current.seekTo(time, true);
-    }
-    setCurrentTime(time);
-  }, [playerReady]);
 
   // Handle speed change
   const handleSpeedChange = useCallback((speed) => {
-    // Clamp speed between 0.25 and 2
     const clampedSpeed = Math.max(0.25, Math.min(2, speed));
-    // Round to 2 decimal places
     const roundedSpeed = Math.round(clampedSpeed * 100) / 100;
     setPlaybackRate(roundedSpeed);
     if (playerRef.current && playerReady) {
@@ -316,17 +257,9 @@ function App() {
     }
   }, [playerReady]);
 
-  // Handle speed slider change
   const handleSpeedSlider = useCallback((value) => {
     handleSpeedChange(value[0]);
   }, [handleSpeedChange]);
-
-  // Reset to loop start
-  const handleReset = useCallback(() => {
-    if (playerRef.current && playerReady) {
-      playerRef.current.seekTo(loopStart, true);
-    }
-  }, [loopStart, playerReady]);
 
   // Speed presets
   const speedPresets = [0.5, 0.75, 1, 1.5, 2];
@@ -345,201 +278,134 @@ function App() {
         }}
       />
       
-      <div className="max-w-4xl mx-auto px-6 py-12 min-h-screen flex flex-col gap-10">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 min-h-screen flex flex-col gap-6">
         {/* Header */}
-        <header className="text-center fade-in relative">
+        <header className="flex items-center justify-between fade-in">
+          <div>
+            <h1 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight heading-text uppercase">
+              Loop Studio
+            </h1>
+            <p className="muted-text text-xs tracking-wide">
+              Practice. Learn. Repeat.
+            </p>
+          </div>
           <Button
             data-testid="theme-toggle-btn"
             variant="ghost"
             size="icon"
             onClick={toggleTheme}
-            className="absolute right-0 top-0 w-10 h-10 rounded-full theme-toggle-btn"
+            className="w-9 h-9 rounded-full theme-toggle-btn"
           >
-            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </Button>
-          <h1 className="font-heading text-4xl sm:text-5xl font-bold tracking-tight heading-text uppercase mb-2">
-            Loop Studio
-          </h1>
-          <p className="muted-text text-sm tracking-wide">
-            Practice. Learn. Repeat.
-          </p>
         </header>
 
         {/* URL Input */}
-        <div className="relative w-full fade-in" style={{ animationDelay: '0.1s' }}>
+        <div className="relative w-full fade-in">
           <input
             data-testid="youtube-url-input"
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleLoadVideo()}
-            placeholder="Paste YouTube URL here..."
+            placeholder="Paste YouTube URL..."
             className="url-input"
           />
           <Button
             data-testid="load-video-btn"
             onClick={handleLoadVideo}
-            className="absolute right-3 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl px-6 font-heading uppercase tracking-wide shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] transition-all active:scale-95"
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg px-4 py-1.5 text-sm font-medium transition-all active:scale-95"
           >
             Load
           </Button>
         </div>
 
         {/* Video Player */}
-        <div className="video-container fade-in" style={{ animationDelay: '0.2s' }} ref={containerRef}>
+        <div className="video-container fade-in">
           {videoId ? (
             <div id="youtube-player" className="w-full h-full" />
           ) : (
             <div className="empty-state">
-              <Video className="w-16 h-16 mb-4" />
-              <span className="text-lg">Paste a YouTube link to begin</span>
+              <Video className="w-12 h-12 mb-3" />
+              <span className="text-sm">Paste a YouTube link to begin</span>
             </div>
           )}
         </div>
 
-        {/* Control Deck */}
+        {/* Compact Control Bar */}
         {videoId && (
-          <div className="control-deck fade-in" style={{ animationDelay: '0.3s' }}>
-            {/* Progress Bar */}
-            <div className="mb-6">
-              <div className="flex justify-between text-xs font-mono muted-text mb-2">
-                <span data-testid="current-time">{formatTime(currentTime)}</span>
-                <span data-testid="duration">{formatTime(duration)}</span>
+          <div className="control-bar fade-in">
+            {/* Loop Times */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="loop-input-group">
+                <span className="text-xs muted-text">FROM</span>
+                <input
+                  data-testid="loop-start-input"
+                  type="text"
+                  value={startTimeInput}
+                  onChange={(e) => setStartTimeInput(e.target.value)}
+                  placeholder="0:00"
+                  className="time-input-compact"
+                />
+                <button
+                  data-testid="set-start-btn"
+                  onClick={setCurrentAsStart}
+                  className="set-btn"
+                >
+                  Set
+                </button>
               </div>
-              <Slider
-                data-testid="progress-slider"
-                value={[currentTime]}
-                max={duration || 100}
-                step={0.1}
-                onValueChange={handleSeek}
-                className="loop-slider"
-              />
+              
+              <span className="muted-text text-sm">→</span>
+              
+              <div className="loop-input-group">
+                <span className="text-xs muted-text">TO</span>
+                <input
+                  data-testid="loop-end-input"
+                  type="text"
+                  value={endTimeInput}
+                  onChange={(e) => setEndTimeInput(e.target.value)}
+                  placeholder="0:00"
+                  className="time-input-compact"
+                />
+                <button
+                  data-testid="set-end-btn"
+                  onClick={setCurrentAsEnd}
+                  className="set-btn"
+                >
+                  Set
+                </button>
+              </div>
             </div>
 
-            {/* Playback Controls */}
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-              {/* Play/Pause */}
-              <div className="flex items-center gap-2">
-                <Button
-                  data-testid="play-pause-btn"
-                  variant="ghost"
-                  size="icon"
-                  onClick={handlePlayPause}
-                  className="w-12 h-12 rounded-full control-btn"
-                >
-                  {playing ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
-                </Button>
-                <Button
-                  data-testid="reset-btn"
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleReset}
-                  className="w-10 h-10 rounded-full control-btn-secondary"
-                >
-                  <RotateCcw className="w-5 h-5" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Speed Control - New Slider Design */}
-            <div className="speed-control-section mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs muted-text uppercase tracking-wide font-heading">Speed</span>
+            {/* Speed Control */}
+            <div className="speed-control">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs muted-text">SPEED</span>
                 <span data-testid="speed-display" className="font-mono text-sm speed-value">{playbackRate}x</span>
               </div>
-              
-              {/* Speed Slider */}
-              <Slider
-                data-testid="speed-slider"
-                value={[playbackRate]}
-                min={0.25}
-                max={2}
-                step={0.05}
-                onValueChange={handleSpeedSlider}
-                className="speed-slider mb-3"
-              />
-              
-              {/* Speed Presets */}
-              <div className="flex items-center justify-between gap-2">
-                {speedPresets.map(speed => (
-                  <Button
-                    key={speed}
-                    data-testid={`speed-preset-${speed}`}
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleSpeedChange(speed)}
-                    className={`speed-preset-btn ${playbackRate === speed ? 'active' : ''}`}
-                  >
-                    {speed}x
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Loop Controls */}
-            <div className="section-divider pt-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Repeat className="w-4 h-4 muted-text" />
-                <span className="text-sm muted-text uppercase tracking-wide font-heading">Loop Section</span>
-              </div>
-              
-              <div className="flex flex-wrap items-center gap-4">
-                {/* Start Time */}
-                <div className="loop-time-input-group">
-                  <span className="text-xs muted-text uppercase">Start</span>
-                  <input
-                    data-testid="loop-start-input"
-                    type="text"
-                    value={startTimeInput}
-                    onChange={(e) => setStartTimeInput(e.target.value)}
-                    placeholder="0:00"
-                    className="time-input w-16"
-                  />
-                  <Button
-                    data-testid="set-start-btn"
-                    variant="ghost"
-                    size="sm"
-                    onClick={setCurrentAsStart}
-                    className="text-xs text-blue-400 hover:text-blue-300 px-2"
-                  >
-                    Set
-                  </Button>
+              <div className="flex items-center gap-2">
+                <Slider
+                  data-testid="speed-slider"
+                  value={[playbackRate]}
+                  min={0.25}
+                  max={2}
+                  step={0.05}
+                  onValueChange={handleSpeedSlider}
+                  className="speed-slider flex-1"
+                />
+                <div className="flex gap-1">
+                  {speedPresets.map(speed => (
+                    <button
+                      key={speed}
+                      data-testid={`speed-preset-${speed}`}
+                      onClick={() => handleSpeedChange(speed)}
+                      className={`speed-chip ${playbackRate === speed ? 'active' : ''}`}
+                    >
+                      {speed}x
+                    </button>
+                  ))}
                 </div>
-
-                {/* End Time */}
-                <div className="loop-time-input-group">
-                  <span className="text-xs muted-text uppercase">End</span>
-                  <input
-                    data-testid="loop-end-input"
-                    type="text"
-                    value={endTimeInput}
-                    onChange={(e) => setEndTimeInput(e.target.value)}
-                    placeholder="0:00"
-                    className="time-input w-16"
-                  />
-                  <Button
-                    data-testid="set-end-btn"
-                    variant="ghost"
-                    size="sm"
-                    onClick={setCurrentAsEnd}
-                    className="text-xs text-blue-400 hover:text-blue-300 px-2"
-                  >
-                    Set
-                  </Button>
-                </div>
-
-                {/* Loop Toggle */}
-                <Button
-                  data-testid="loop-toggle-btn"
-                  onClick={handleToggleLoop}
-                  className={`font-heading uppercase tracking-wide px-6 py-2 rounded-full text-sm transition-all active:scale-95 ${
-                    loopEnabled 
-                      ? 'bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30' 
-                      : 'bg-blue-500 text-white hover:bg-blue-600 shadow-[0_0_15px_rgba(59,130,246,0.3)]'
-                  }`}
-                >
-                  {loopEnabled ? 'Stop Loop' : 'Start Loop'}
-                </Button>
               </div>
             </div>
           </div>
@@ -547,63 +413,45 @@ function App() {
 
         {/* Recent Videos */}
         {recentVideos.length > 0 && (
-          <div className="fade-in" style={{ animationDelay: '0.4s' }}>
-            <div className="flex items-center justify-between mb-4">
+          <div className="fade-in">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <History className="w-5 h-5 muted-text" />
-                <h2 className="font-heading text-xl muted-text uppercase tracking-widest">Recent</h2>
+                <History className="w-4 h-4 muted-text" />
+                <span className="text-xs muted-text uppercase tracking-wider">Recent</span>
               </div>
-              <Button
+              <button
                 data-testid="clear-history-btn"
-                variant="ghost"
-                size="sm"
                 onClick={handleClearHistory}
-                className="muted-text hover:opacity-80"
+                className="text-xs muted-text hover:opacity-70 flex items-center gap-1"
               >
-                <Trash2 className="w-4 h-4 mr-1" />
+                <Trash2 className="w-3 h-3" />
                 Clear
-              </Button>
+              </button>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="flex gap-3 overflow-x-auto pb-2">
               {recentVideos.map((video) => (
                 <div
                   key={video.id}
                   data-testid={`history-item-${video.id}`}
                   onClick={() => handleLoadFromHistory(video)}
-                  className="history-card group"
+                  className="history-card-compact"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="w-20 h-12 rounded-lg overflow-hidden flex-shrink-0 history-thumbnail">
-                      <img 
-                        src={`https://img.youtube.com/vi/${video.id}/mqdefault.jpg`}
-                        alt={video.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="history-card-title text-sm font-medium truncate">
-                        {video.title}
-                      </p>
-                      <p className="text-xs font-mono history-card-meta mt-1">
-                        {video.loopStart !== undefined && video.loopEnd !== undefined 
-                          ? `${formatTime(video.loopStart)} - ${formatTime(video.loopEnd)}`
-                          : 'Full video'
-                        }
-                        {video.playbackRate && video.playbackRate !== 1 && ` @ ${video.playbackRate}x`}
-                      </p>
-                    </div>
+                  <img 
+                    src={`https://img.youtube.com/vi/${video.id}/mqdefault.jpg`}
+                    alt={video.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="history-card-overlay">
+                    <span className="text-xs font-mono">
+                      {formatTime(video.loopStart)} - {formatTime(video.loopEnd)}
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
           </div>
         )}
-
-        {/* Footer */}
-        <footer className="text-center muted-text text-xs mt-auto pt-8">
-          <p>Press Enter to load video after pasting URL</p>
-        </footer>
       </div>
     </div>
   );
