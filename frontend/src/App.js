@@ -12,7 +12,8 @@ import {
   Trash2, 
   Video,
   Repeat,
-  Clock
+  Sun,
+  Moon
 } from "lucide-react";
 
 // Parse YouTube URL to extract video ID
@@ -67,12 +68,22 @@ function App() {
   const [startTimeInput, setStartTimeInput] = useState("0:00");
   const [endTimeInput, setEndTimeInput] = useState("0:00");
   const [playerReady, setPlayerReady] = useState(false);
+  const [theme, setTheme] = useLocalStorage("loop-studio-theme", "dark");
   
   const [recentVideos, setRecentVideos] = useLocalStorage("loop-studio-history", []);
   
   const playerRef = useRef(null);
   const containerRef = useRef(null);
   const progressIntervalRef = useRef(null);
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  }, [setTheme]);
 
   // Load YouTube IFrame API
   useEffect(() => {
@@ -295,11 +306,20 @@ function App() {
 
   // Handle speed change
   const handleSpeedChange = useCallback((speed) => {
-    setPlaybackRate(speed);
+    // Clamp speed between 0.25 and 2
+    const clampedSpeed = Math.max(0.25, Math.min(2, speed));
+    // Round to 2 decimal places
+    const roundedSpeed = Math.round(clampedSpeed * 100) / 100;
+    setPlaybackRate(roundedSpeed);
     if (playerRef.current && playerReady) {
-      playerRef.current.setPlaybackRate(speed);
+      playerRef.current.setPlaybackRate(roundedSpeed);
     }
   }, [playerReady]);
+
+  // Handle speed slider change
+  const handleSpeedSlider = useCallback((value) => {
+    handleSpeedChange(value[0]);
+  }, [handleSpeedChange]);
 
   // Reset to loop start
   const handleReset = useCallback(() => {
@@ -308,30 +328,39 @@ function App() {
     }
   }, [loopStart, playerReady]);
 
-  // Speed options
-  const speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  // Speed presets
+  const speedPresets = [0.5, 0.75, 1, 1.5, 2];
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${theme}`}>
       <div className="noise-overlay" />
       <Toaster 
         position="top-center" 
         toastOptions={{
           style: {
-            background: '#18181b',
-            border: '1px solid #27272a',
-            color: '#fafafa'
+            background: theme === 'dark' ? '#18181b' : '#ffffff',
+            border: theme === 'dark' ? '1px solid #27272a' : '1px solid #e4e4e7',
+            color: theme === 'dark' ? '#fafafa' : '#18181b'
           }
         }}
       />
       
       <div className="max-w-4xl mx-auto px-6 py-12 min-h-screen flex flex-col gap-10">
         {/* Header */}
-        <header className="text-center fade-in">
-          <h1 className="font-heading text-4xl sm:text-5xl font-bold tracking-tight text-white uppercase mb-2">
+        <header className="text-center fade-in relative">
+          <Button
+            data-testid="theme-toggle-btn"
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            className="absolute right-0 top-0 w-10 h-10 rounded-full theme-toggle-btn"
+          >
+            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </Button>
+          <h1 className="font-heading text-4xl sm:text-5xl font-bold tracking-tight heading-text uppercase mb-2">
             Loop Studio
           </h1>
-          <p className="text-zinc-500 text-sm tracking-wide">
+          <p className="muted-text text-sm tracking-wide">
             Practice. Learn. Repeat.
           </p>
         </header>
@@ -345,7 +374,7 @@ function App() {
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleLoadVideo()}
             placeholder="Paste YouTube URL here..."
-            className="w-full bg-[#121214] border border-[#27272a] text-lg p-5 pr-28 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-inner placeholder:text-zinc-600 text-white"
+            className="url-input"
           />
           <Button
             data-testid="load-video-btn"
@@ -362,7 +391,7 @@ function App() {
             <div id="youtube-player" className="w-full h-full" />
           ) : (
             <div className="empty-state">
-              <Video className="w-16 h-16 mb-4 text-zinc-700" />
+              <Video className="w-16 h-16 mb-4" />
               <span className="text-lg">Paste a YouTube link to begin</span>
             </div>
           )}
@@ -373,7 +402,7 @@ function App() {
           <div className="control-deck fade-in" style={{ animationDelay: '0.3s' }}>
             {/* Progress Bar */}
             <div className="mb-6">
-              <div className="flex justify-between text-xs font-mono text-zinc-500 mb-2">
+              <div className="flex justify-between text-xs font-mono muted-text mb-2">
                 <span data-testid="current-time">{formatTime(currentTime)}</span>
                 <span data-testid="duration">{formatTime(duration)}</span>
               </div>
@@ -396,7 +425,7 @@ function App() {
                   variant="ghost"
                   size="icon"
                   onClick={handlePlayPause}
-                  className="w-12 h-12 rounded-full hover:bg-white/10 text-white"
+                  className="w-12 h-12 rounded-full control-btn"
                 >
                   {playing ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
                 </Button>
@@ -405,42 +434,59 @@ function App() {
                   variant="ghost"
                   size="icon"
                   onClick={handleReset}
-                  className="w-10 h-10 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white"
+                  className="w-10 h-10 rounded-full control-btn-secondary"
                 >
                   <RotateCcw className="w-5 h-5" />
                 </Button>
               </div>
+            </div>
 
-              {/* Speed Control */}
-              <div className="flex items-center gap-3 bg-zinc-900/50 px-4 py-2 rounded-xl border border-white/5">
-                <Clock className="w-4 h-4 text-zinc-500" />
-                <span className="text-xs text-zinc-500 uppercase tracking-wide font-heading">Speed</span>
-                <select
-                  data-testid="speed-select"
-                  value={playbackRate}
-                  onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
-                  className="bg-transparent text-white font-mono text-sm focus:outline-none cursor-pointer"
-                >
-                  {speedOptions.map(speed => (
-                    <option key={speed} value={speed} className="bg-zinc-900">
-                      {speed}x
-                    </option>
-                  ))}
-                </select>
+            {/* Speed Control - New Slider Design */}
+            <div className="speed-control-section mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs muted-text uppercase tracking-wide font-heading">Speed</span>
+                <span data-testid="speed-display" className="font-mono text-sm speed-value">{playbackRate}x</span>
+              </div>
+              
+              {/* Speed Slider */}
+              <Slider
+                data-testid="speed-slider"
+                value={[playbackRate]}
+                min={0.25}
+                max={2}
+                step={0.05}
+                onValueChange={handleSpeedSlider}
+                className="speed-slider mb-3"
+              />
+              
+              {/* Speed Presets */}
+              <div className="flex items-center justify-between gap-2">
+                {speedPresets.map(speed => (
+                  <Button
+                    key={speed}
+                    data-testid={`speed-preset-${speed}`}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSpeedChange(speed)}
+                    className={`speed-preset-btn ${playbackRate === speed ? 'active' : ''}`}
+                  >
+                    {speed}x
+                  </Button>
+                ))}
               </div>
             </div>
 
             {/* Loop Controls */}
-            <div className="border-t border-zinc-800 pt-6">
+            <div className="section-divider pt-6">
               <div className="flex items-center gap-2 mb-4">
-                <Repeat className="w-4 h-4 text-zinc-500" />
-                <span className="text-sm text-zinc-400 uppercase tracking-wide font-heading">Loop Section</span>
+                <Repeat className="w-4 h-4 muted-text" />
+                <span className="text-sm muted-text uppercase tracking-wide font-heading">Loop Section</span>
               </div>
               
               <div className="flex flex-wrap items-center gap-4">
                 {/* Start Time */}
-                <div className="flex items-center gap-2 bg-zinc-900/50 px-3 py-2 rounded-xl border border-white/5">
-                  <span className="text-xs text-zinc-500 uppercase">Start</span>
+                <div className="loop-time-input-group">
+                  <span className="text-xs muted-text uppercase">Start</span>
                   <input
                     data-testid="loop-start-input"
                     type="text"
@@ -461,8 +507,8 @@ function App() {
                 </div>
 
                 {/* End Time */}
-                <div className="flex items-center gap-2 bg-zinc-900/50 px-3 py-2 rounded-xl border border-white/5">
-                  <span className="text-xs text-zinc-500 uppercase">End</span>
+                <div className="loop-time-input-group">
+                  <span className="text-xs muted-text uppercase">End</span>
                   <input
                     data-testid="loop-end-input"
                     type="text"
@@ -504,15 +550,15 @@ function App() {
           <div className="fade-in" style={{ animationDelay: '0.4s' }}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <History className="w-5 h-5 text-zinc-500" />
-                <h2 className="font-heading text-xl text-zinc-400 uppercase tracking-widest">Recent</h2>
+                <History className="w-5 h-5 muted-text" />
+                <h2 className="font-heading text-xl muted-text uppercase tracking-widest">Recent</h2>
               </div>
               <Button
                 data-testid="clear-history-btn"
                 variant="ghost"
                 size="sm"
                 onClick={handleClearHistory}
-                className="text-zinc-600 hover:text-zinc-400"
+                className="muted-text hover:opacity-80"
               >
                 <Trash2 className="w-4 h-4 mr-1" />
                 Clear
@@ -528,7 +574,7 @@ function App() {
                   className="history-card group"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-20 h-12 rounded-lg overflow-hidden bg-zinc-800 flex-shrink-0">
+                    <div className="w-20 h-12 rounded-lg overflow-hidden flex-shrink-0 history-thumbnail">
                       <img 
                         src={`https://img.youtube.com/vi/${video.id}/mqdefault.jpg`}
                         alt={video.title}
@@ -536,10 +582,10 @@ function App() {
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-zinc-300 group-hover:text-white text-sm font-medium truncate">
+                      <p className="history-card-title text-sm font-medium truncate">
                         {video.title}
                       </p>
-                      <p className="text-xs font-mono text-zinc-600 group-hover:text-blue-400 mt-1">
+                      <p className="text-xs font-mono history-card-meta mt-1">
                         {video.loopStart !== undefined && video.loopEnd !== undefined 
                           ? `${formatTime(video.loopStart)} - ${formatTime(video.loopEnd)}`
                           : 'Full video'
@@ -555,7 +601,7 @@ function App() {
         )}
 
         {/* Footer */}
-        <footer className="text-center text-zinc-600 text-xs mt-auto pt-8">
+        <footer className="text-center muted-text text-xs mt-auto pt-8">
           <p>Press Enter to load video after pasting URL</p>
         </footer>
       </div>
