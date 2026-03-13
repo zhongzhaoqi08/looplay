@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import "@/App.css";
-import ReactPlayer from "react-player";
 import { Toaster, toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -67,17 +66,122 @@ function App() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [startTimeInput, setStartTimeInput] = useState("0:00");
   const [endTimeInput, setEndTimeInput] = useState("0:00");
+  const [playerReady, setPlayerReady] = useState(false);
   
   const [recentVideos, setRecentVideos] = useLocalStorage("loop-studio-history", []);
   
   const playerRef = useRef(null);
+  const containerRef = useRef(null);
+  const progressIntervalRef = useRef(null);
+
+  // Load YouTube IFrame API
+  useEffect(() => {
+    if (window.YT) return;
+    
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+  }, []);
+
+  // Initialize player when videoId changes
+  useEffect(() => {
+    if (!videoId) return;
+    
+    // Clean up previous player
+    if (playerRef.current) {
+      playerRef.current.destroy();
+      playerRef.current = null;
+    }
+    setPlayerReady(false);
+
+    const initPlayer = () => {
+      if (!window.YT || !window.YT.Player) {
+        setTimeout(initPlayer, 100);
+        return;
+      }
+
+      playerRef.current = new window.YT.Player('youtube-player', {
+        videoId: videoId,
+        playerVars: {
+          autoplay: 1,
+          modestbranding: 1,
+          rel: 0,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          iv_load_policy: 3,
+          playsinline: 1,
+          enablejsapi: 1,
+          origin: window.location.origin
+        },
+        events: {
+          onReady: (event) => {
+            setPlayerReady(true);
+            const dur = event.target.getDuration();
+            setDuration(dur);
+            setLoopEnd(dur);
+            setEndTimeInput(formatTime(dur));
+            event.target.setPlaybackRate(playbackRate);
+            event.target.playVideo();
+            setPlaying(true);
+          },
+          onStateChange: (event) => {
+            // 1 = playing, 2 = paused
+            if (event.data === 1) {
+              setPlaying(true);
+            } else if (event.data === 2 || event.data === 0) {
+              setPlaying(false);
+            }
+          }
+        }
+      });
+    };
+
+    initPlayer();
+
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
+      }
+    };
+  }, [videoId, playbackRate]);
+
+  // Progress tracking
+  useEffect(() => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+    }
+
+    if (playerReady && playing) {
+      progressIntervalRef.current = setInterval(() => {
+        if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+          const time = playerRef.current.getCurrentTime();
+          setCurrentTime(time);
+
+          // Loop logic
+          if (loopEnabled && loopEnd > loopStart) {
+            if (time >= loopEnd) {
+              playerRef.current.seekTo(loopStart, true);
+            }
+          }
+        }
+      }, 200);
+    }
+
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
+  }, [playerReady, playing, loopEnabled, loopStart, loopEnd]);
 
   // Handle URL submission
   const handleLoadVideo = useCallback(() => {
     const id = parseYouTubeUrl(url);
     if (id) {
       setVideoId(id);
-      setPlaying(true);
       setLoopStart(0);
       setLoopEnd(0);
       setLoopEnabled(false);
@@ -88,25 +192,6 @@ function App() {
       toast.error("Invalid YouTube URL");
     }
   }, [url]);
-
-  // Handle video ready
-  const handleDuration = useCallback((dur) => {
-    setDuration(dur);
-    setLoopEnd(dur);
-    setEndTimeInput(formatTime(dur));
-  }, []);
-
-  // Handle video progress
-  const handleProgress = useCallback(({ playedSeconds }) => {
-    setCurrentTime(playedSeconds);
-    
-    // Loop logic
-    if (loopEnabled && loopEnd > loopStart) {
-      if (playedSeconds >= loopEnd) {
-        playerRef.current?.seekTo(loopStart, 'seconds');
-      }
-    }
-  }, [loopEnabled, loopStart, loopEnd]);
 
   // Save to history when video plays
   useEffect(() => {
@@ -128,10 +213,20 @@ function App() {
     }
   }, [videoId, duration, loopStart, loopEnd, playbackRate, setRecentVideos]);
 
+  // Toggle play/pause
+  const handlePlayPause = useCallback(() => {
+    if (!playerRef.current || !playerReady) return;
+    
+    if (playing) {
+      playerRef.current.pauseVideo();
+    } else {
+      playerRef.current.playVideo();
+    }
+  }, [playing, playerReady]);
+
   // Toggle loop
   const handleToggleLoop = useCallback(() => {
     if (!loopEnabled) {
-      // Enable loop with current settings
       const start = parseTime(startTimeInput);
       const end = parseTime(endTimeInput);
       
@@ -143,19 +238,21 @@ function App() {
       setLoopStart(start);
       setLoopEnd(end);
       setLoopEnabled(true);
-      playerRef.current?.seekTo(start, 'seconds');
+      
+      if (playerRef.current && playerReady) {
+        playerRef.current.seekTo(start, true);
+      }
       toast.success(`Loop set: ${formatTime(start)} - ${formatTime(end)}`);
     } else {
       setLoopEnabled(false);
       toast.info("Loop disabled");
     }
-  }, [loopEnabled, startTimeInput, endTimeInput]);
+  }, [loopEnabled, startTimeInput, endTimeInput, playerReady]);
 
   // Load from history
   const handleLoadFromHistory = useCallback((video) => {
     setUrl(video.url);
     setVideoId(video.id);
-    setPlaying(true);
     if (video.loopStart !== undefined) {
       setLoopStart(video.loopStart);
       setStartTimeInput(formatTime(video.loopStart));
@@ -190,9 +287,26 @@ function App() {
   // Handle slider change for seeking
   const handleSeek = useCallback((value) => {
     const time = value[0];
-    playerRef.current?.seekTo(time, 'seconds');
+    if (playerRef.current && playerReady) {
+      playerRef.current.seekTo(time, true);
+    }
     setCurrentTime(time);
-  }, []);
+  }, [playerReady]);
+
+  // Handle speed change
+  const handleSpeedChange = useCallback((speed) => {
+    setPlaybackRate(speed);
+    if (playerRef.current && playerReady) {
+      playerRef.current.setPlaybackRate(speed);
+    }
+  }, [playerReady]);
+
+  // Reset to loop start
+  const handleReset = useCallback(() => {
+    if (playerRef.current && playerReady) {
+      playerRef.current.seekTo(loopStart, true);
+    }
+  }, [loopStart, playerReady]);
 
   // Speed options
   const speedOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -243,27 +357,9 @@ function App() {
         </div>
 
         {/* Video Player */}
-        <div className="video-container fade-in" style={{ animationDelay: '0.2s' }}>
+        <div className="video-container fade-in" style={{ animationDelay: '0.2s' }} ref={containerRef}>
           {videoId ? (
-            <ReactPlayer
-              ref={playerRef}
-              url={`https://youtube.com/watch?v=${videoId}`}
-              playing={playing}
-              playbackRate={playbackRate}
-              onDuration={handleDuration}
-              onProgress={handleProgress}
-              width="100%"
-              height="100%"
-              controls={false}
-              config={{
-                youtube: {
-                  playerVars: {
-                    modestbranding: 1,
-                    rel: 0
-                  }
-                }
-              }}
-            />
+            <div id="youtube-player" className="w-full h-full" />
           ) : (
             <div className="empty-state">
               <Video className="w-16 h-16 mb-4 text-zinc-700" />
@@ -278,8 +374,8 @@ function App() {
             {/* Progress Bar */}
             <div className="mb-6">
               <div className="flex justify-between text-xs font-mono text-zinc-500 mb-2">
-                <span>{formatTime(currentTime)}</span>
-                <span>{formatTime(duration)}</span>
+                <span data-testid="current-time">{formatTime(currentTime)}</span>
+                <span data-testid="duration">{formatTime(duration)}</span>
               </div>
               <Slider
                 data-testid="progress-slider"
@@ -299,7 +395,7 @@ function App() {
                   data-testid="play-pause-btn"
                   variant="ghost"
                   size="icon"
-                  onClick={() => setPlaying(!playing)}
+                  onClick={handlePlayPause}
                   className="w-12 h-12 rounded-full hover:bg-white/10 text-white"
                 >
                   {playing ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
@@ -308,7 +404,7 @@ function App() {
                   data-testid="reset-btn"
                   variant="ghost"
                   size="icon"
-                  onClick={() => playerRef.current?.seekTo(loopStart, 'seconds')}
+                  onClick={handleReset}
                   className="w-10 h-10 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white"
                 >
                   <RotateCcw className="w-5 h-5" />
@@ -322,7 +418,7 @@ function App() {
                 <select
                   data-testid="speed-select"
                   value={playbackRate}
-                  onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
+                  onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
                   className="bg-transparent text-white font-mono text-sm focus:outline-none cursor-pointer"
                 >
                   {speedOptions.map(speed => (
